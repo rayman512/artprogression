@@ -1,3 +1,11 @@
 {
-  "artworks": []
+  "artworks": [
+    {
+      "day": 1,
+      "date": "2026-01-05",
+      "imageUrl": "https://res.cloudinary.com/db5ptapmj/image/upload/v1769619966/art-progression/xtzjjqse64yz5mkojvol.jpg",
+      "notes": "First drawing. Fallout knight with power armer.",
+      "uploadedAt": "2026-01-28T17:06:06.655Z"
+    }
+  ]
 }
