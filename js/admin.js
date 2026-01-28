@@ -197,22 +197,32 @@ class AdminPanel {
                 ...doc.data()
             }));
 
-            // Suggest next day number
-            if (this.artworks.length > 0) {
-                const maxDay = Math.max(...this.artworks.map(a => a.day));
-                document.getElementById('day').value = maxDay + 1;
-            } else {
-                document.getElementById('day').value = 1;
-            }
-
             // Render the artworks list for editing/deleting
             this.renderArtworksList();
         } catch (error) {
             console.log('Error loading artworks:', error);
             this.artworks = [];
-            document.getElementById('day').value = 1;
             this.renderArtworksList();
         }
+    }
+
+    // Calculate day number from date based on earliest artwork date
+    calculateDayNumber(dateStr) {
+        if (this.artworks.length === 0) {
+            return 1;
+        }
+
+        // Find the earliest date among all artworks
+        const earliestDate = this.artworks.reduce((earliest, artwork) => {
+            const artworkDate = new Date(artwork.date);
+            return artworkDate < earliest ? artworkDate : earliest;
+        }, new Date(this.artworks[0].date));
+
+        const targetDate = new Date(dateStr);
+        const diffTime = targetDate.getTime() - earliestDate.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        return diffDays + 1; // Day 1 is the first day
     }
 
     previewImage(file) {
@@ -231,7 +241,6 @@ class AdminPanel {
         const btn = document.getElementById('upload-btn');
         const messageEl = document.getElementById('upload-message');
 
-        const day = parseInt(document.getElementById('day').value);
         const date = document.getElementById('date').value;
         const notes = document.getElementById('notes').value;
         const imageFile = document.getElementById('image').files[0];
@@ -241,9 +250,8 @@ class AdminPanel {
             return;
         }
 
-        // Check for duplicate day
-        if (this.artworks.some(a => a.day === day)) {
-            this.showError('upload-message', `Day ${day} already exists!`);
+        if (!date) {
+            this.showError('upload-message', 'Please select a date');
             return;
         }
 
@@ -254,6 +262,9 @@ class AdminPanel {
         try {
             // Upload to Cloudinary
             const imageUrl = await this.uploadToCloudinary(imageFile);
+
+            // Calculate day number from date
+            const day = this.calculateDayNumber(date);
 
             // Create artwork entry
             const artwork = {
@@ -275,7 +286,7 @@ class AdminPanel {
             messageEl.innerHTML = `
                 <div class="message success">
                     <strong>Artwork uploaded successfully!</strong><br>
-                    Day ${day} has been added to your gallery.
+                    Added to Day ${day} (${this.formatDate(date)}).
                 </div>
             `;
 
@@ -283,6 +294,7 @@ class AdminPanel {
             document.getElementById('image').value = '';
             document.getElementById('notes').value = '';
             document.getElementById('preview').innerHTML = '';
+            this.setDefaultDate();
 
         } catch (error) {
             console.error('Upload error:', error);
@@ -330,14 +342,20 @@ class AdminPanel {
             return;
         }
 
-        // Sort by day descending (newest first)
-        const sortedArtworks = [...this.artworks].sort((a, b) => b.day - a.day);
+        // Sort by date descending (newest first), then by uploadedAt for same date
+        const sortedArtworks = [...this.artworks].sort((a, b) => {
+            const dateCompare = new Date(b.date) - new Date(a.date);
+            if (dateCompare !== 0) return dateCompare;
+            return new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0);
+        });
 
-        listEl.innerHTML = sortedArtworks.map(artwork => `
+        listEl.innerHTML = sortedArtworks.map(artwork => {
+            const day = this.calculateDayNumber(artwork.date);
+            return `
             <div class="artwork-list-item" data-id="${artwork.id}">
-                <img src="${artwork.imageUrl}" alt="Day ${artwork.day}">
+                <img src="${artwork.imageUrl}" alt="Day ${day}">
                 <div class="artwork-list-info">
-                    <div class="day">Day ${artwork.day}</div>
+                    <div class="day">Day ${day}</div>
                     <div class="date">${this.formatDate(artwork.date)}</div>
                     ${artwork.notes ? `<div class="notes">${artwork.notes}</div>` : ''}
                 </div>
@@ -358,7 +376,7 @@ class AdminPanel {
                     </button>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
 
         // Add event listeners to edit buttons
         listEl.querySelectorAll('.edit-btn').forEach(btn => {
@@ -393,9 +411,12 @@ class AdminPanel {
 
         this.editingArtwork = artwork;
 
+        // Calculate current day number
+        const day = this.calculateDayNumber(artwork.date);
+
         // Populate form
         document.getElementById('edit-id').value = artwork.id;
-        document.getElementById('edit-day').value = artwork.day;
+        document.getElementById('edit-day-display').textContent = `Day ${day}`;
         document.getElementById('edit-date').value = artwork.date;
         document.getElementById('edit-notes').value = artwork.notes || '';
         document.getElementById('edit-image-preview').src = artwork.imageUrl;
@@ -416,14 +437,11 @@ class AdminPanel {
         const btn = document.getElementById('edit-save-btn');
         const messageEl = document.getElementById('edit-message');
 
-        const newDay = parseInt(document.getElementById('edit-day').value);
         const newDate = document.getElementById('edit-date').value;
         const newNotes = document.getElementById('edit-notes').value;
 
-        // Check for duplicate day (excluding current artwork)
-        if (newDay !== this.editingArtwork.day &&
-            this.artworks.some(a => a.day === newDay && a.id !== this.editingArtwork.id)) {
-            this.showError('edit-message', `Day ${newDay} already exists!`);
+        if (!newDate) {
+            this.showError('edit-message', 'Please select a date');
             return;
         }
 
@@ -432,6 +450,9 @@ class AdminPanel {
         messageEl.innerHTML = '';
 
         try {
+            // Calculate new day number from date
+            const newDay = this.calculateDayNumber(newDate);
+
             // Update in Firestore
             await this.db.collection('artworks').doc(this.editingArtwork.id).update({
                 day: newDay,
@@ -462,8 +483,11 @@ class AdminPanel {
 
         this.deletingArtwork = artwork;
 
+        // Calculate day number
+        const day = this.calculateDayNumber(artwork.date);
+
         // Populate modal
-        document.getElementById('delete-day-text').textContent = `Day ${artwork.day}`;
+        document.getElementById('delete-day-text').textContent = `Day ${day} (${this.formatDate(artwork.date)})`;
         document.getElementById('delete-image-preview').src = artwork.imageUrl;
         document.getElementById('delete-message').innerHTML = '';
 
