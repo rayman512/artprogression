@@ -1,35 +1,70 @@
-// Art Progression - Admin Upload
+// Art Progression - Admin Upload with Firebase
 
-// ===========================================
-// CONFIGURATION - Update these values!
-// ===========================================
-const CONFIG = {
-    ADMIN_PASSWORD: 'SketchDay365!',
-    CLOUDINARY_CLOUD_NAME: 'db5ptapmj',
-    CLOUDINARY_UPLOAD_PRESET: 'art-progression'
-};
-
-// ===========================================
-// Admin Application
-// ===========================================
 class AdminPanel {
     constructor() {
-        this.isLoggedIn = false;
+        this.db = null;
+        this.auth = null;
+        this.currentUser = null;
         this.artworks = [];
+        this.googleAccessToken = null; // Store for future Google Photos integration
+
         this.init();
     }
 
     init() {
+        this.initFirebase();
         this.setupEventListeners();
         this.setDefaultDate();
-        this.checkSession();
+    }
+
+    initFirebase() {
+        // Check if Firebase config is set up
+        if (!window.FIREBASE_CONFIG || window.FIREBASE_CONFIG.apiKey === "YOUR_API_KEY") {
+            this.showConfigError();
+            return;
+        }
+
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(window.FIREBASE_CONFIG);
+            }
+            this.db = firebase.firestore();
+            this.auth = firebase.auth();
+
+            // Listen for auth state changes
+            this.auth.onAuthStateChanged((user) => {
+                if (user) {
+                    this.handleSignIn(user);
+                } else {
+                    this.handleSignOut();
+                }
+            });
+        } catch (error) {
+            console.error('Firebase init error:', error);
+            this.showError('login-message', 'Failed to initialize Firebase: ' + error.message);
+        }
+    }
+
+    showConfigError() {
+        const messageEl = document.getElementById('login-message');
+        messageEl.innerHTML = `
+            <div class="message error">
+                <strong>Firebase not configured</strong><br>
+                Please update <code>js/firebase-config.js</code> with your Firebase project settings.
+            </div>
+        `;
+        document.getElementById('google-signin-btn').disabled = true;
     }
 
     setupEventListeners() {
-        // Login form
-        document.getElementById('login-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.login();
+        // Google Sign-In button
+        document.getElementById('google-signin-btn').addEventListener('click', () => {
+            this.signInWithGoogle();
+        });
+
+        // Sign-out button
+        document.getElementById('signout-btn').addEventListener('click', () => {
+            this.signOut();
         });
 
         // Upload form
@@ -49,37 +84,84 @@ class AdminPanel {
         document.getElementById('date').value = today;
     }
 
-    checkSession() {
-        const session = sessionStorage.getItem('artprogression_admin');
-        if (session === 'true') {
-            this.showUploadSection();
+    async signInWithGoogle() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        // Request additional scopes for future Google Photos integration
+        provider.addScope('https://www.googleapis.com/auth/photoslibrary.readonly');
+
+        try {
+            const result = await this.auth.signInWithPopup(provider);
+            // Store the access token for Google Photos API
+            this.googleAccessToken = result.credential.accessToken;
+            sessionStorage.setItem('google_access_token', this.googleAccessToken);
+        } catch (error) {
+            console.error('Sign-in error:', error);
+            this.showError('login-message', 'Sign-in failed: ' + error.message);
         }
     }
 
-    login() {
-        const password = document.getElementById('password').value;
-        const messageEl = document.getElementById('login-message');
+    async handleSignIn(user) {
+        this.currentUser = user;
 
-        if (password === CONFIG.ADMIN_PASSWORD) {
-            sessionStorage.setItem('artprogression_admin', 'true');
-            this.showUploadSection();
-        } else {
-            messageEl.innerHTML = '<div class="message error">Incorrect password</div>';
+        // Check if user is authorized
+        if (!this.isAuthorizedAdmin(user.email)) {
+            this.showError('login-message', `Access denied. ${user.email} is not authorized.`);
+            await this.auth.signOut();
+            return;
         }
+
+        // Restore access token from session if available
+        this.googleAccessToken = sessionStorage.getItem('google_access_token');
+
+        this.showUploadSection(user);
+        await this.loadExistingArtworks();
     }
 
-    showUploadSection() {
-        this.isLoggedIn = true;
+    handleSignOut() {
+        this.currentUser = null;
+        this.googleAccessToken = null;
+        sessionStorage.removeItem('google_access_token');
+        document.getElementById('login-section').classList.remove('hidden');
+        document.getElementById('upload-section').classList.add('hidden');
+    }
+
+    isAuthorizedAdmin(email) {
+        // If no admins configured, allow anyone (for initial setup)
+        if (!window.AUTHORIZED_ADMINS || window.AUTHORIZED_ADMINS.length === 0) {
+            console.warn('No authorized admins configured. Allowing all users.');
+            return true;
+        }
+        return window.AUTHORIZED_ADMINS.includes(email);
+    }
+
+    showUploadSection(user) {
         document.getElementById('login-section').classList.add('hidden');
         document.getElementById('upload-section').classList.remove('hidden');
-        this.loadExistingArtworks();
+
+        // Show user info
+        document.getElementById('user-info').innerHTML = `
+            <div class="user-badge">
+                <img src="${user.photoURL || ''}" alt="" class="user-avatar">
+                <span>Signed in as <strong>${user.displayName || user.email}</strong></span>
+            </div>
+        `;
+    }
+
+    async signOut() {
+        try {
+            await this.auth.signOut();
+        } catch (error) {
+            console.error('Sign-out error:', error);
+        }
     }
 
     async loadExistingArtworks() {
         try {
-            const response = await fetch('data/artworks.json');
-            const data = await response.json();
-            this.artworks = data.artworks || [];
+            const snapshot = await this.db.collection('artworks').get();
+            this.artworks = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
 
             // Suggest next day number
             if (this.artworks.length > 0) {
@@ -89,7 +171,7 @@ class AdminPanel {
                 document.getElementById('day').value = 1;
             }
         } catch (error) {
-            console.log('No existing artworks found');
+            console.log('Error loading artworks:', error);
             this.artworks = [];
             document.getElementById('day').value = 1;
         }
@@ -117,13 +199,13 @@ class AdminPanel {
         const imageFile = document.getElementById('image').files[0];
 
         if (!imageFile) {
-            messageEl.innerHTML = '<div class="message error">Please select an image</div>';
+            this.showError('upload-message', 'Please select an image');
             return;
         }
 
         // Check for duplicate day
         if (this.artworks.some(a => a.day === day)) {
-            messageEl.innerHTML = '<div class="message error">Day ' + day + ' already exists!</div>';
+            this.showError('upload-message', `Day ${day} already exists!`);
             return;
         }
 
@@ -141,18 +223,21 @@ class AdminPanel {
                 date: date,
                 imageUrl: imageUrl,
                 notes: notes,
-                uploadedAt: new Date().toISOString()
+                uploadedAt: new Date().toISOString(),
+                uploadedBy: this.currentUser.email
             };
 
-            // Add to artworks array
+            // Save to Firestore
+            await this.db.collection('artworks').add(artwork);
+
+            // Add to local array
             this.artworks.push(artwork);
 
-            // Show success message with instructions
+            // Show success message
             messageEl.innerHTML = `
                 <div class="message success">
-                    <strong>Image uploaded successfully!</strong><br><br>
-                    To complete the upload, add this to your artworks.json file:<br>
-                    <textarea style="width:100%; height:120px; margin-top:12px; font-family:monospace; font-size:12px;" readonly>${JSON.stringify(artwork, null, 2)}</textarea>
+                    <strong>Artwork uploaded successfully!</strong><br>
+                    Day ${day} has been added to your gallery.
                 </div>
             `;
 
@@ -164,7 +249,7 @@ class AdminPanel {
 
         } catch (error) {
             console.error('Upload error:', error);
-            messageEl.innerHTML = `<div class="message error">Upload failed: ${error.message}</div>`;
+            this.showError('upload-message', 'Upload failed: ' + error.message);
         }
 
         btn.disabled = false;
@@ -174,11 +259,11 @@ class AdminPanel {
     async uploadToCloudinary(file) {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('upload_preset', CONFIG.CLOUDINARY_UPLOAD_PRESET);
+        formData.append('upload_preset', window.CLOUDINARY_CONFIG.UPLOAD_PRESET);
         formData.append('folder', 'art-progression');
 
         const response = await fetch(
-            `https://api.cloudinary.com/v1_1/${CONFIG.CLOUDINARY_CLOUD_NAME}/image/upload`,
+            `https://api.cloudinary.com/v1_1/${window.CLOUDINARY_CONFIG.CLOUD_NAME}/image/upload`,
             {
                 method: 'POST',
                 body: formData
@@ -191,6 +276,12 @@ class AdminPanel {
 
         const data = await response.json();
         return data.secure_url;
+    }
+
+    showError(elementId, message) {
+        document.getElementById(elementId).innerHTML = `
+            <div class="message error">${message}</div>
+        `;
     }
 }
 

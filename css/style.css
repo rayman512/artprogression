@@ -492,3 +492,73 @@ footer {
 .back-link:hover {
     text-decoration: underline;
 }
+
+/* Google Sign-In Button */
+.google-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    font-weight: 500;
+}
+
+.google-btn:hover {
+    background: var(--bg-primary);
+    border-color: var(--text-secondary);
+}
+
+.google-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.login-note {
+    margin-top: 16px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* User Info Badge */
+.user-info {
+    margin-bottom: 24px;
+}
+
+.user-badge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+}
+
+/* Admin Actions */
+.admin-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 24px;
+}
+
+.btn-secondary {
+    width: auto;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-primary);
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
+}
