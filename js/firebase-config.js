@@ -5,12 +5,12 @@
 // ===========================================
 
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyB2_27ZhSikSQ_EZPqAneFwaspjaJR1KGY",
+    authDomain: "art-progression.firebaseapp.com",
+    projectId: "art-progression",
+    storageBucket: "art-progression.firebasestorage.app",
+    messagingSenderId: "359856478292",
+    appId: "1:359856478292:web:af02c32a36d9d96cdeb5c1"
 };
 
 // Authorized admin emails (only these Google accounts can upload)
