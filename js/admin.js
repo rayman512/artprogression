@@ -4,11 +4,8 @@
 // CONFIGURATION - Update these values!
 // ===========================================
 const CONFIG = {
-    // Your admin password (change this!)
-    ADMIN_PASSWORD: 'changeme123',
-
-    // Cloudinary settings (get these from cloudinary.com)
-    CLOUDINARY_CLOUD_NAME: 'your-cloud-name',
+    ADMIN_PASSWORD: 'SketchDay365!',
+    CLOUDINARY_CLOUD_NAME: 'db5ptapmj',
     CLOUDINARY_UPLOAD_PRESET: 'art-progression'
 };
 
