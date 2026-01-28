@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Art Progression - 365 Day Journey</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Art Progression</h1>
+            <p class="subtitle">A 365-day journey to improve my sketching skills</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="stats">
+            <div class="stat">
+                <span class="stat-number" id="days-completed">0</span>
+                <span class="stat-label">Days Completed</span>
+            </div>
+            <div class="stat">
+                <span class="stat-number" id="days-remaining">365</span>
+                <span class="stat-label">Days Remaining</span>
+            </div>
+            <div class="stat">
+                <span class="stat-number" id="current-streak">0</span>
+                <span class="stat-label">Current Streak</span>
+            </div>
+        </section>
+
+        <section class="view-toggle">
+            <button class="toggle-btn active" data-view="grid">Grid</button>
+            <button class="toggle-btn" data-view="timeline">Timeline</button>
+            <button class="toggle-btn" data-view="compare">Compare</button>
+        </section>
+
+        <section id="gallery" class="gallery">
+            <!-- Artwork cards will be inserted here by JavaScript -->
+        </section>
+
+        <section id="timeline" class="timeline hidden">
+            <!-- Timeline view will be inserted here -->
+        </section>
+
+        <section id="compare" class="compare-view hidden">
+            <h2>Progress Comparison</h2>
+            <div class="compare-container">
+                <div class="compare-card">
+                    <h3>First Sketch</h3>
+                    <div id="first-sketch" class="compare-image"></div>
+                </div>
+                <div class="compare-card">
+                    <h3>Latest Sketch</h3>
+                    <div id="latest-sketch" class="compare-image"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal for viewing individual artwork -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <button class="modal-close">&times;</button>
+            <img id="modal-image" src="" alt="">
+            <div class="modal-info">
+                <h2 id="modal-title"></h2>
+                <p id="modal-date"></p>
+                <p id="modal-notes"></p>
+            </div>
+            <div class="modal-nav">
+                <button id="prev-btn" class="nav-btn">&larr; Previous</button>
+                <button id="next-btn" class="nav-btn">Next &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 Art Progression</p>
+        </div>
+    </footer>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
