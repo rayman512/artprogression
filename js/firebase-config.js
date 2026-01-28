@@ -15,8 +15,7 @@ const firebaseConfig = {
 
 // Authorized admin emails (only these Google accounts can upload)
 const AUTHORIZED_ADMINS = [
-    // Add your Google email(s) here, e.g.:
-    // "your.email@gmail.com"
+    "larson.ray@gmail.com"
 ];
 
 // Cloudinary config (keep existing settings)
