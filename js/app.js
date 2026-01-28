@@ -5,22 +5,59 @@ class ArtGallery {
         this.artworks = [];
         this.currentIndex = 0;
         this.currentView = 'grid';
+        this.db = null;
 
         this.init();
     }
 
     async init() {
+        this.initFirebase();
         await this.loadArtworks();
         this.renderGallery();
         this.updateStats();
         this.setupEventListeners();
     }
 
+    initFirebase() {
+        // Check if Firebase config is set up
+        if (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(window.FIREBASE_CONFIG);
+                }
+                this.db = firebase.firestore();
+            } catch (error) {
+                console.log('Firebase init error:', error);
+                this.db = null;
+            }
+        }
+    }
+
     async loadArtworks() {
+        // Try loading from Firebase first
+        if (this.db) {
+            try {
+                const snapshot = await this.db.collection('artworks').get();
+                if (!snapshot.empty) {
+                    this.artworks = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    this.artworks.sort((a, b) => b.day - a.day); // Newest first
+                    console.log('Loaded artworks from Firebase');
+                    return;
+                }
+            } catch (error) {
+                console.log('Firebase load error, falling back to JSON:', error);
+            }
+        }
+
+        // Fallback to JSON file
         try {
             const response = await fetch('data/artworks.json');
             const data = await response.json();
             this.artworks = data.artworks.sort((a, b) => b.day - a.day); // Newest first
+            console.log('Loaded artworks from JSON file');
         } catch (error) {
             console.log('No artworks found or error loading:', error);
             this.artworks = [];
