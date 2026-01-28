@@ -43,7 +43,12 @@ class ArtGallery {
                         id: doc.id,
                         ...doc.data()
                     }));
-                    this.artworks.sort((a, b) => b.day - a.day); // Newest first
+                    // Sort by date descending (newest first), then by uploadedAt for same date
+                    this.artworks.sort((a, b) => {
+                        const dateCompare = new Date(b.date) - new Date(a.date);
+                        if (dateCompare !== 0) return dateCompare;
+                        return new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0);
+                    });
                     console.log('Loaded artworks from Firebase');
                     return;
                 }
@@ -56,12 +61,35 @@ class ArtGallery {
         try {
             const response = await fetch('data/artworks.json');
             const data = await response.json();
-            this.artworks = data.artworks.sort((a, b) => b.day - a.day); // Newest first
+            this.artworks = data.artworks.sort((a, b) => {
+                const dateCompare = new Date(b.date) - new Date(a.date);
+                if (dateCompare !== 0) return dateCompare;
+                return new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0);
+            });
             console.log('Loaded artworks from JSON file');
         } catch (error) {
             console.log('No artworks found or error loading:', error);
             this.artworks = [];
         }
+    }
+
+    // Calculate day number from date based on earliest artwork date
+    calculateDayNumber(dateStr) {
+        if (this.artworks.length === 0) {
+            return 1;
+        }
+
+        // Find the earliest date among all artworks
+        const earliestDate = this.artworks.reduce((earliest, artwork) => {
+            const artworkDate = new Date(artwork.date);
+            return artworkDate < earliest ? artworkDate : earliest;
+        }, new Date(this.artworks[0].date));
+
+        const targetDate = new Date(dateStr);
+        const diffTime = targetDate.getTime() - earliestDate.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        return diffDays + 1; // Day 1 is the first day
     }
 
     renderGallery() {
@@ -77,15 +105,17 @@ class ArtGallery {
             return;
         }
 
-        gallery.innerHTML = this.artworks.map((artwork, index) => `
+        gallery.innerHTML = this.artworks.map((artwork, index) => {
+            const day = this.calculateDayNumber(artwork.date);
+            return `
             <div class="artwork-card" data-index="${index}">
-                <img src="${artwork.imageUrl}" alt="Day ${artwork.day}" loading="lazy">
+                <img src="${artwork.imageUrl}" alt="Day ${day}" loading="lazy">
                 <div class="artwork-info">
-                    <span class="artwork-day">Day ${artwork.day}</span>
+                    <span class="artwork-day">Day ${day}</span>
                     <span class="artwork-date">${this.formatDate(artwork.date)}</span>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     }
 
     renderTimeline() {
@@ -101,36 +131,66 @@ class ArtGallery {
             return;
         }
 
-        // Sort by day ascending for timeline
-        const sorted = [...this.artworks].sort((a, b) => a.day - b.day);
+        // Sort by date ascending for timeline, then by uploadedAt for same date
+        const sorted = [...this.artworks].sort((a, b) => {
+            const dateCompare = new Date(a.date) - new Date(b.date);
+            if (dateCompare !== 0) return dateCompare;
+            return new Date(a.uploadedAt || 0) - new Date(b.uploadedAt || 0);
+        });
 
-        timeline.innerHTML = sorted.map((artwork, index) => `
-            <div class="timeline-item" data-index="${this.artworks.findIndex(a => a.day === artwork.day)}">
-                <img src="${artwork.imageUrl}" alt="Day ${artwork.day}">
+        // Group artworks by date
+        const groupedByDate = sorted.reduce((groups, artwork) => {
+            const date = artwork.date;
+            if (!groups[date]) {
+                groups[date] = [];
+            }
+            groups[date].push(artwork);
+            return groups;
+        }, {});
+
+        // Render timeline with grouped dates
+        timeline.innerHTML = Object.entries(groupedByDate).map(([date, artworksOnDate]) => {
+            const day = this.calculateDayNumber(date);
+            const hasMultiple = artworksOnDate.length > 1;
+
+            return `
+            <div class="timeline-item${hasMultiple ? ' has-multiple' : ''}" data-date="${date}">
+                <div class="timeline-images${hasMultiple ? ' scrollable' : ''}">
+                    ${artworksOnDate.map((artwork, idx) => `
+                        <div class="timeline-image-wrapper" data-index="${this.artworks.findIndex(a => a.id === artwork.id || (a.date === artwork.date && a.imageUrl === artwork.imageUrl))}">
+                            <img src="${artwork.imageUrl}" alt="Day ${day}${hasMultiple ? ` - Image ${idx + 1}` : ''}">
+                            ${artwork.notes ? `<p class="image-notes">${artwork.notes}</p>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
                 <div class="timeline-content">
-                    <h3>Day ${artwork.day}</h3>
-                    <p class="date">${this.formatDate(artwork.date)}</p>
-                    ${artwork.notes ? `<p class="notes">${artwork.notes}</p>` : ''}
+                    <h3>Day ${day}</h3>
+                    <p class="date">${this.formatDate(date)}</p>
+                    ${hasMultiple ? `<p class="image-count">${artworksOnDate.length} pictures</p>` : ''}
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     }
 
     renderCompare() {
         if (this.artworks.length === 0) return;
 
-        const sorted = [...this.artworks].sort((a, b) => a.day - b.day);
+        // Sort by date to find first and latest
+        const sorted = [...this.artworks].sort((a, b) => new Date(a.date) - new Date(b.date));
         const first = sorted[0];
         const latest = sorted[sorted.length - 1];
 
+        const firstDay = this.calculateDayNumber(first.date);
+        const latestDay = this.calculateDayNumber(latest.date);
+
         document.getElementById('first-sketch').innerHTML = `
-            <img src="${first.imageUrl}" alt="Day ${first.day}">
-            <p style="margin-top: 12px; color: var(--text-secondary);">Day ${first.day} - ${this.formatDate(first.date)}</p>
+            <img src="${first.imageUrl}" alt="Day ${firstDay}">
+            <p style="margin-top: 12px; color: var(--text-secondary);">Day ${firstDay} - ${this.formatDate(first.date)}</p>
         `;
 
         document.getElementById('latest-sketch').innerHTML = `
-            <img src="${latest.imageUrl}" alt="Day ${latest.day}">
-            <p style="margin-top: 12px; color: var(--text-secondary);">Day ${latest.day} - ${this.formatDate(latest.date)}</p>
+            <img src="${latest.imageUrl}" alt="Day ${latestDay}">
+            <p style="margin-top: 12px; color: var(--text-secondary);">Day ${latestDay} - ${this.formatDate(latest.date)}</p>
         `;
     }
 
@@ -194,11 +254,11 @@ class ArtGallery {
             }
         });
 
-        // Timeline item clicks
+        // Timeline item clicks - handle individual images in groups
         document.getElementById('timeline').addEventListener('click', (e) => {
-            const item = e.target.closest('.timeline-item');
-            if (item) {
-                this.openModal(parseInt(item.dataset.index));
+            const imageWrapper = e.target.closest('.timeline-image-wrapper');
+            if (imageWrapper) {
+                this.openModal(parseInt(imageWrapper.dataset.index));
             }
         });
 
@@ -258,8 +318,10 @@ class ArtGallery {
         const artwork = this.artworks[index];
         const modal = document.getElementById('modal');
 
+        const day = this.calculateDayNumber(artwork.date);
+
         document.getElementById('modal-image').src = artwork.imageUrl;
-        document.getElementById('modal-title').textContent = `Day ${artwork.day}`;
+        document.getElementById('modal-title').textContent = `Day ${day}`;
         document.getElementById('modal-date').textContent = this.formatDate(artwork.date);
         document.getElementById('modal-notes').textContent = artwork.notes || '';
 
