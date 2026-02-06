@@ -25,14 +25,7 @@ const CLOUDINARY_CONFIG = {
     UPLOAD_PRESET: 'art-progression'
 };
 
-// Google Picker API config
-const GOOGLE_PICKER_CONFIG = {
-    API_KEY: 'AIzaSyCwJJ37ZmYxlN1fySnUkQNQolBCDbhEt3k',
-    CLIENT_ID: '359856478292-2g0heeonhvdtqnd7idug34sb9scd4otd.apps.googleusercontent.com'
-};
-
 // Export for use in other modules
 window.FIREBASE_CONFIG = firebaseConfig;
 window.AUTHORIZED_ADMINS = AUTHORIZED_ADMINS;
 window.CLOUDINARY_CONFIG = CLOUDINARY_CONFIG;
-window.GOOGLE_PICKER_CONFIG = GOOGLE_PICKER_CONFIG;

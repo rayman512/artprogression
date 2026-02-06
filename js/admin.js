@@ -6,10 +6,8 @@ class AdminPanel {
         this.auth = null;
         this.currentUser = null;
         this.artworks = [];
-        this.googleAccessToken = null; // Store for Google Photos integration
         this.editingArtwork = null; // Track artwork being edited
         this.deletingArtwork = null; // Track artwork being deleted
-        this.googlePhotoFile = null; // File object from Google Picker
 
         this.init();
     }
@@ -112,11 +110,6 @@ class AdminPanel {
                 this.closeDeleteModal();
             }
         });
-
-        // Google Photos button (uses Google Picker)
-        document.getElementById('google-photos-btn').addEventListener('click', () => {
-            this.openGooglePicker();
-        });
     }
 
     setDefaultDate() {
@@ -126,15 +119,9 @@ class AdminPanel {
 
     async signInWithGoogle() {
         const provider = new firebase.auth.GoogleAuthProvider();
-        // Request scopes for Google Photos/Drive access via Picker
-        provider.addScope('https://www.googleapis.com/auth/photoslibrary.readonly');
-        provider.addScope('https://www.googleapis.com/auth/drive.readonly');
 
         try {
-            const result = await this.auth.signInWithPopup(provider);
-            // Store the access token for Google Photos API
-            this.googleAccessToken = result.credential.accessToken;
-            sessionStorage.setItem('google_access_token', this.googleAccessToken);
+            await this.auth.signInWithPopup(provider);
         } catch (error) {
             console.error('Sign-in error:', error);
             this.showError('login-message', 'Sign-in failed: ' + error.message);
@@ -151,17 +138,12 @@ class AdminPanel {
             return;
         }
 
-        // Restore access token from session if available
-        this.googleAccessToken = sessionStorage.getItem('google_access_token');
-
         this.showUploadSection(user);
         await this.loadExistingArtworks();
     }
 
     handleSignOut() {
         this.currentUser = null;
-        this.googleAccessToken = null;
-        sessionStorage.removeItem('google_access_token');
         document.getElementById('login-section').classList.remove('hidden');
         document.getElementById('upload-section').classList.add('hidden');
     }
@@ -250,10 +232,10 @@ class AdminPanel {
 
         const date = document.getElementById('date').value;
         const notes = document.getElementById('notes').value;
-        const imageFile = document.getElementById('image').files[0] || this.googlePhotoFile;
+        const imageFile = document.getElementById('image').files[0];
 
         if (!imageFile) {
-            this.showError('upload-message', 'Please select an image or choose from Google Photos');
+            this.showError('upload-message', 'Please select an image');
             return;
         }
 
@@ -301,7 +283,6 @@ class AdminPanel {
             document.getElementById('image').value = '';
             document.getElementById('notes').value = '';
             document.getElementById('preview').innerHTML = '';
-            this.googlePhotoFile = null; // Clear Google Photos selection
             this.setDefaultDate();
 
         } catch (error) {
@@ -535,124 +516,6 @@ class AdminPanel {
 
         btn.disabled = false;
         btn.textContent = 'Delete';
-    }
-
-    // ==========================================
-    // Google Picker Integration
-    // ==========================================
-
-    async openGooglePicker() {
-        // Check if we have an access token
-        if (!this.googleAccessToken) {
-            this.showError('upload-message', 'Please sign out and sign in again to access Google Photos.');
-            return;
-        }
-
-        // Load the Google Picker API
-        await this.loadPickerApi();
-
-        // Create and show the picker
-        this.createPicker();
-    }
-
-    loadPickerApi() {
-        return new Promise((resolve, reject) => {
-            if (window.google && window.google.picker) {
-                resolve();
-                return;
-            }
-
-            gapi.load('picker', {
-                callback: resolve,
-                onerror: reject
-            });
-        });
-    }
-
-    createPicker() {
-        const config = window.GOOGLE_PICKER_CONFIG;
-
-        // Create a Google Photos view
-        const photosView = new google.picker.PhotosView()
-            .setType(google.picker.PhotosView.Type.PHOTOS);
-
-        // Create another view for albums
-        const albumsView = new google.picker.PhotosView()
-            .setType(google.picker.PhotosView.Type.ALBUMS);
-
-        const picker = new google.picker.PickerBuilder()
-            .setAppId(config.CLIENT_ID.split('-')[0]) // Project number
-            .setOAuthToken(this.googleAccessToken)
-            .setDeveloperKey(config.API_KEY)
-            .addView(photosView)
-            .addView(albumsView)
-            .setCallback((data) => this.handlePickerCallback(data))
-            .setTitle('Select a photo from Google Photos')
-            .build();
-
-        picker.setVisible(true);
-    }
-
-    async handlePickerCallback(data) {
-        if (data.action === google.picker.Action.PICKED) {
-            const doc = data.docs[0];
-            console.log('Picked document:', doc);
-
-            try {
-                // Show loading state in preview
-                document.getElementById('preview').innerHTML = `
-                    <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
-                        Loading photo...
-                    </div>
-                `;
-
-                // Get the photo URL - for Google Photos, we need to use the url or thumbnails
-                let imageUrl = doc.url;
-
-                // Try to get a larger thumbnail if available
-                if (doc.thumbnails && doc.thumbnails.length > 0) {
-                    // Get the largest thumbnail
-                    const largest = doc.thumbnails.reduce((a, b) =>
-                        (a.width * a.height) > (b.width * b.height) ? a : b
-                    );
-                    imageUrl = largest.url;
-                }
-
-                // Download the image
-                const response = await fetch(imageUrl);
-                if (!response.ok) {
-                    throw new Error('Failed to download photo');
-                }
-
-                const blob = await response.blob();
-
-                // Create a File object from the blob
-                const filename = doc.name || 'google-photo.jpg';
-                this.googlePhotoFile = new File([blob], filename, { type: blob.type || 'image/jpeg' });
-
-                // Show preview
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    document.getElementById('preview').innerHTML = `
-                        <img src="${e.target.result}" alt="Preview">
-                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px;">
-                            Selected from Google Photos: ${filename}
-                        </p>
-                    `;
-                };
-                reader.readAsDataURL(blob);
-
-                // Clear the file input
-                document.getElementById('image').value = '';
-
-            } catch (error) {
-                console.error('Error loading photo:', error);
-                this.showError('upload-message', 'Failed to load photo: ' + error.message);
-                document.getElementById('preview').innerHTML = '';
-            }
-        } else if (data.action === google.picker.Action.CANCEL) {
-            console.log('Picker cancelled');
-        }
     }
 }
 

@@ -64,6 +64,14 @@ artprogression/
 └── README.md
 ```
 
+## Known Limitations
+
+### Google Photos Integration
+
+Direct integration with Google Photos is not supported due to Google's API restrictions. The Google Photos Library API and Google Picker PhotosView both require app verification, which is a lengthy review process by Google.
+
+**Workaround:** Download photos from Google Photos to your device, then upload them using the standard file picker on the admin page.
+
 ## License
 
 Personal project - feel free to fork and adapt for your own journey!
