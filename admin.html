@@ -47,7 +47,13 @@
 
                 <div class="form-group">
                     <label for="image">Select Image</label>
-                    <input type="file" id="image" name="image" accept="image/*" required>
+                    <input type="file" id="image" name="image" accept="image/*">
+                    <div class="image-source-options">
+                        <span class="or-divider">or</span>
+                        <button type="button" id="google-photos-btn" class="btn btn-secondary">
+                            Select from Google Photos
+                        </button>
+                    </div>
                     <div id="preview" class="preview-container"></div>
                 </div>
 
@@ -120,6 +126,29 @@
                     <button type="button" class="btn btn-secondary" id="delete-cancel-btn">Cancel</button>
                     <button type="button" class="btn btn-danger" id="delete-confirm-btn">Delete</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Photos Modal -->
+    <div id="google-photos-modal" class="modal hidden">
+        <div class="modal-content google-photos-modal-content">
+            <button class="modal-close" id="gp-modal-close">&times;</button>
+            <div class="gp-modal-header">
+                <button id="gp-back-btn" class="btn-back hidden">&larr;</button>
+                <h2 id="gp-modal-title">Google Photos</h2>
+            </div>
+            <div id="gp-loading" class="gp-loading hidden">
+                <div class="gp-spinner"></div>
+                <p>Loading...</p>
+            </div>
+            <div id="gp-error" class="gp-error hidden"></div>
+            <div id="gp-albums" class="gp-albums"></div>
+            <div id="gp-photos" class="gp-photos hidden"></div>
+            <div id="gp-selected-bar" class="gp-selected-bar hidden">
+                <img id="gp-selected-thumb" src="" alt="Selected">
+                <span id="gp-selected-name"></span>
+                <button id="gp-use-btn" class="btn">Use This Photo</button>
             </div>
         </div>
     </div>
