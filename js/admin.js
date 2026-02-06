@@ -126,8 +126,9 @@ class AdminPanel {
 
     async signInWithGoogle() {
         const provider = new firebase.auth.GoogleAuthProvider();
-        // Request additional scopes for future Google Photos integration
+        // Request scopes for Google Photos/Drive access via Picker
         provider.addScope('https://www.googleapis.com/auth/photoslibrary.readonly');
+        provider.addScope('https://www.googleapis.com/auth/drive.readonly');
 
         try {
             const result = await this.auth.signInWithPopup(provider);
