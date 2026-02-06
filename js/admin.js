@@ -9,12 +9,7 @@ class AdminPanel {
         this.googleAccessToken = null; // Store for Google Photos integration
         this.editingArtwork = null; // Track artwork being edited
         this.deletingArtwork = null; // Track artwork being deleted
-
-        // Google Photos state
-        this.googlePhotosAlbums = [];
-        this.googlePhotosCurrentAlbum = null;
-        this.selectedGooglePhoto = null;
-        this.googlePhotoFile = null; // File object from Google Photos
+        this.googlePhotoFile = null; // File object from Google Picker
 
         this.init();
     }
@@ -118,25 +113,9 @@ class AdminPanel {
             }
         });
 
-        // Google Photos button
+        // Google Photos button (uses Google Picker)
         document.getElementById('google-photos-btn').addEventListener('click', () => {
-            this.openGooglePhotosModal();
-        });
-
-        // Google Photos modal events
-        document.getElementById('gp-modal-close').addEventListener('click', () => {
-            this.closeGooglePhotosModal();
-        });
-        document.getElementById('gp-back-btn').addEventListener('click', () => {
-            this.showAlbumsView();
-        });
-        document.getElementById('gp-use-btn').addEventListener('click', () => {
-            this.useSelectedPhoto();
-        });
-        document.getElementById('google-photos-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'google-photos-modal') {
-                this.closeGooglePhotosModal();
-            }
+            this.openGooglePicker();
         });
     }
 
@@ -558,307 +537,121 @@ class AdminPanel {
     }
 
     // ==========================================
-    // Google Photos Integration
+    // Google Picker Integration
     // ==========================================
 
-    async openGooglePhotosModal() {
+    async openGooglePicker() {
         // Check if we have an access token
         if (!this.googleAccessToken) {
             this.showError('upload-message', 'Please sign out and sign in again to access Google Photos.');
             return;
         }
 
-        // Reset state
-        this.googlePhotosCurrentAlbum = null;
-        this.selectedGooglePhoto = null;
+        // Load the Google Picker API
+        await this.loadPickerApi();
 
-        // Show modal
-        document.getElementById('google-photos-modal').classList.remove('hidden');
-
-        // Load albums
-        await this.loadGooglePhotosAlbums();
+        // Create and show the picker
+        this.createPicker();
     }
 
-    closeGooglePhotosModal() {
-        document.getElementById('google-photos-modal').classList.add('hidden');
-        this.selectedGooglePhoto = null;
-        this.googlePhotosCurrentAlbum = null;
-    }
-
-    showGooglePhotosLoading(show) {
-        document.getElementById('gp-loading').classList.toggle('hidden', !show);
-    }
-
-    showGooglePhotosError(message) {
-        const errorEl = document.getElementById('gp-error');
-        if (message) {
-            errorEl.textContent = message;
-            errorEl.classList.remove('hidden');
-        } else {
-            errorEl.classList.add('hidden');
-        }
-    }
-
-    async loadGooglePhotosAlbums() {
-        this.showGooglePhotosLoading(true);
-        this.showGooglePhotosError(null);
-        document.getElementById('gp-albums').innerHTML = '';
-        document.getElementById('gp-photos').classList.add('hidden');
-        document.getElementById('gp-selected-bar').classList.add('hidden');
-        document.getElementById('gp-back-btn').classList.add('hidden');
-        document.getElementById('gp-modal-title').textContent = 'Google Photos';
-
-        try {
-            const response = await fetch('https://photoslibrary.googleapis.com/v1/albums?pageSize=50', {
-                headers: {
-                    'Authorization': `Bearer ${this.googleAccessToken}`
-                }
-            });
-
-            if (response.status === 401) {
-                // Token expired, need to re-authenticate
-                this.showGooglePhotosError('Session expired. Please sign out and sign in again.');
-                this.showGooglePhotosLoading(false);
+    loadPickerApi() {
+        return new Promise((resolve, reject) => {
+            if (window.google && window.google.picker) {
+                resolve();
                 return;
             }
 
-            if (!response.ok) {
-                throw new Error('Failed to fetch albums');
-            }
-
-            const data = await response.json();
-            this.googlePhotosAlbums = data.albums || [];
-
-            this.renderAlbums();
-        } catch (error) {
-            console.error('Error loading albums:', error);
-            this.showGooglePhotosError('Failed to load albums: ' + error.message);
-        }
-
-        this.showGooglePhotosLoading(false);
-    }
-
-    renderAlbums() {
-        const container = document.getElementById('gp-albums');
-        container.classList.remove('hidden');
-
-        // Add "All Photos" option first
-        let html = `
-            <div class="gp-album-card" data-album-id="all">
-                <div style="width: 100%; aspect-ratio: 1; background: linear-gradient(135deg, var(--accent) 0%, #1d4ed8 100%); display: flex; align-items: center; justify-content: center;">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                        <polyline points="21 15 16 10 5 21"></polyline>
-                    </svg>
-                </div>
-                <div class="gp-album-info">
-                    <div class="gp-album-title">All Photos</div>
-                    <div class="gp-album-count">Recent photos</div>
-                </div>
-            </div>
-        `;
-
-        // Add album cards
-        this.googlePhotosAlbums.forEach(album => {
-            const coverUrl = album.coverPhotoBaseUrl ? `${album.coverPhotoBaseUrl}=w300-h300-c` : '';
-            html += `
-                <div class="gp-album-card" data-album-id="${album.id}">
-                    ${coverUrl ? `<img src="${coverUrl}" alt="${album.title}">` : '<div style="width: 100%; aspect-ratio: 1; background: var(--bg-primary);"></div>'}
-                    <div class="gp-album-info">
-                        <div class="gp-album-title">${album.title}</div>
-                        <div class="gp-album-count">${album.mediaItemsCount || 0} items</div>
-                    </div>
-                </div>
-            `;
-        });
-
-        container.innerHTML = html;
-
-        // Add click handlers
-        container.querySelectorAll('.gp-album-card').forEach(card => {
-            card.addEventListener('click', () => {
-                const albumId = card.dataset.albumId;
-                if (albumId === 'all') {
-                    this.loadRecentPhotos();
-                } else {
-                    this.loadAlbumPhotos(albumId);
-                }
+            gapi.load('picker', {
+                callback: resolve,
+                onerror: reject
             });
         });
     }
 
-    async loadRecentPhotos() {
-        this.googlePhotosCurrentAlbum = { id: 'all', title: 'All Photos' };
-        await this.loadPhotos();
+    createPicker() {
+        const config = window.GOOGLE_PICKER_CONFIG;
+
+        // Create a Google Photos view
+        const photosView = new google.picker.PhotosView()
+            .setType(google.picker.PhotosView.Type.PHOTOS);
+
+        // Create another view for albums
+        const albumsView = new google.picker.PhotosView()
+            .setType(google.picker.PhotosView.Type.ALBUMS);
+
+        const picker = new google.picker.PickerBuilder()
+            .setAppId(config.CLIENT_ID.split('-')[0]) // Project number
+            .setOAuthToken(this.googleAccessToken)
+            .setDeveloperKey(config.API_KEY)
+            .addView(photosView)
+            .addView(albumsView)
+            .setCallback((data) => this.handlePickerCallback(data))
+            .setTitle('Select a photo from Google Photos')
+            .build();
+
+        picker.setVisible(true);
     }
 
-    async loadAlbumPhotos(albumId) {
-        const album = this.googlePhotosAlbums.find(a => a.id === albumId);
-        this.googlePhotosCurrentAlbum = album || { id: albumId, title: 'Album' };
-        await this.loadPhotos(albumId);
-    }
+    async handlePickerCallback(data) {
+        if (data.action === google.picker.Action.PICKED) {
+            const doc = data.docs[0];
+            console.log('Picked document:', doc);
 
-    async loadPhotos(albumId = null) {
-        this.showGooglePhotosLoading(true);
-        this.showGooglePhotosError(null);
-        document.getElementById('gp-albums').classList.add('hidden');
-        document.getElementById('gp-photos').innerHTML = '';
-        document.getElementById('gp-photos').classList.remove('hidden');
-        document.getElementById('gp-back-btn').classList.remove('hidden');
-        document.getElementById('gp-modal-title').textContent = this.googlePhotosCurrentAlbum?.title || 'Photos';
-        document.getElementById('gp-selected-bar').classList.add('hidden');
-        this.selectedGooglePhoto = null;
-
-        try {
-            let url = 'https://photoslibrary.googleapis.com/v1/mediaItems:search';
-            const body = {
-                pageSize: 50
-            };
-
-            if (albumId) {
-                body.albumId = albumId;
-            }
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.googleAccessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-            });
-
-            if (response.status === 401) {
-                this.showGooglePhotosError('Session expired. Please sign out and sign in again.');
-                this.showGooglePhotosLoading(false);
-                return;
-            }
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch photos');
-            }
-
-            const data = await response.json();
-            const mediaItems = data.mediaItems || [];
-
-            // Filter to only images
-            const photos = mediaItems.filter(item =>
-                item.mimeType && item.mimeType.startsWith('image/')
-            );
-
-            this.renderPhotos(photos);
-        } catch (error) {
-            console.error('Error loading photos:', error);
-            this.showGooglePhotosError('Failed to load photos: ' + error.message);
-        }
-
-        this.showGooglePhotosLoading(false);
-    }
-
-    renderPhotos(photos) {
-        const container = document.getElementById('gp-photos');
-
-        if (photos.length === 0) {
-            container.innerHTML = '<div class="gp-loading"><p>No photos found in this album</p></div>';
-            return;
-        }
-
-        const html = photos.map(photo => `
-            <div class="gp-photo-item" data-photo-id="${photo.id}">
-                <img src="${photo.baseUrl}=w200-h200-c" alt="${photo.filename || 'Photo'}">
-            </div>
-        `).join('');
-
-        container.innerHTML = html;
-
-        // Store photos data for selection
-        this.currentPhotos = photos;
-
-        // Add click handlers
-        container.querySelectorAll('.gp-photo-item').forEach(item => {
-            item.addEventListener('click', () => {
-                this.selectPhoto(item.dataset.photoId);
-            });
-        });
-    }
-
-    selectPhoto(photoId) {
-        const photo = this.currentPhotos.find(p => p.id === photoId);
-        if (!photo) return;
-
-        this.selectedGooglePhoto = photo;
-
-        // Update selection UI
-        document.querySelectorAll('.gp-photo-item').forEach(item => {
-            item.classList.toggle('selected', item.dataset.photoId === photoId);
-        });
-
-        // Show selected bar
-        const selectedBar = document.getElementById('gp-selected-bar');
-        document.getElementById('gp-selected-thumb').src = `${photo.baseUrl}=w100-h100-c`;
-        document.getElementById('gp-selected-name').textContent = photo.filename || 'Selected photo';
-        selectedBar.classList.remove('hidden');
-    }
-
-    showAlbumsView() {
-        this.googlePhotosCurrentAlbum = null;
-        this.selectedGooglePhoto = null;
-        document.getElementById('gp-photos').classList.add('hidden');
-        document.getElementById('gp-selected-bar').classList.add('hidden');
-        document.getElementById('gp-back-btn').classList.add('hidden');
-        document.getElementById('gp-modal-title').textContent = 'Google Photos';
-        document.getElementById('gp-albums').classList.remove('hidden');
-    }
-
-    async useSelectedPhoto() {
-        if (!this.selectedGooglePhoto) return;
-
-        const btn = document.getElementById('gp-use-btn');
-        btn.disabled = true;
-        btn.textContent = 'Loading...';
-
-        try {
-            // Download the photo as a blob
-            // Use =d for download or =w2048-h2048 for a reasonable size
-            const downloadUrl = `${this.selectedGooglePhoto.baseUrl}=w2048-h2048`;
-            const response = await fetch(downloadUrl);
-
-            if (!response.ok) {
-                throw new Error('Failed to download photo');
-            }
-
-            const blob = await response.blob();
-
-            // Create a File object from the blob
-            const filename = this.selectedGooglePhoto.filename || 'google-photo.jpg';
-            this.googlePhotoFile = new File([blob], filename, { type: blob.type });
-
-            // Show preview
-            const reader = new FileReader();
-            reader.onload = (e) => {
+            try {
+                // Show loading state in preview
                 document.getElementById('preview').innerHTML = `
-                    <img src="${e.target.result}" alt="Preview">
-                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px;">
-                        Selected from Google Photos
-                    </p>
+                    <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                        Loading photo...
+                    </div>
                 `;
-            };
-            reader.readAsDataURL(blob);
 
-            // Clear the file input (since we're using Google Photos)
-            document.getElementById('image').value = '';
+                // Get the photo URL - for Google Photos, we need to use the url or thumbnails
+                let imageUrl = doc.url;
 
-            // Close the modal
-            this.closeGooglePhotosModal();
+                // Try to get a larger thumbnail if available
+                if (doc.thumbnails && doc.thumbnails.length > 0) {
+                    // Get the largest thumbnail
+                    const largest = doc.thumbnails.reduce((a, b) =>
+                        (a.width * a.height) > (b.width * b.height) ? a : b
+                    );
+                    imageUrl = largest.url;
+                }
 
-        } catch (error) {
-            console.error('Error downloading photo:', error);
-            this.showGooglePhotosError('Failed to download photo: ' + error.message);
+                // Download the image
+                const response = await fetch(imageUrl);
+                if (!response.ok) {
+                    throw new Error('Failed to download photo');
+                }
+
+                const blob = await response.blob();
+
+                // Create a File object from the blob
+                const filename = doc.name || 'google-photo.jpg';
+                this.googlePhotoFile = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+
+                // Show preview
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('preview').innerHTML = `
+                        <img src="${e.target.result}" alt="Preview">
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px;">
+                            Selected from Google Photos: ${filename}
+                        </p>
+                    `;
+                };
+                reader.readAsDataURL(blob);
+
+                // Clear the file input
+                document.getElementById('image').value = '';
+
+            } catch (error) {
+                console.error('Error loading photo:', error);
+                this.showError('upload-message', 'Failed to load photo: ' + error.message);
+                document.getElementById('preview').innerHTML = '';
+            }
+        } else if (data.action === google.picker.Action.CANCEL) {
+            console.log('Picker cancelled');
         }
-
-        btn.disabled = false;
-        btn.textContent = 'Use This Photo';
     }
 }
 
