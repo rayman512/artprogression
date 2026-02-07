@@ -6,6 +6,7 @@ class AdminPanel {
         this.auth = null;
         this.currentUser = null;
         this.artworks = [];
+        this.selectedFiles = []; // Files selected for bulk upload
         this.editingArtwork = null; // Track artwork being edited
         this.deletingArtwork = null; // Track artwork being deleted
 
@@ -71,12 +72,12 @@ class AdminPanel {
         // Upload form
         document.getElementById('upload-form').addEventListener('submit', (e) => {
             e.preventDefault();
-            this.uploadArtwork();
+            this.uploadArtworks();
         });
 
-        // Image preview
+        // Image preview (supports multiple files)
         document.getElementById('image').addEventListener('change', (e) => {
-            this.previewImage(e.target.files[0]);
+            this.previewImages(e.target.files);
         });
 
         // Edit modal events
@@ -214,28 +215,83 @@ class AdminPanel {
         return diffDays + 1; // Day 1 is the first day
     }
 
-    previewImage(file) {
-        if (!file) return;
+    previewImages(fileList) {
+        if (!fileList || fileList.length === 0) return;
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            document.getElementById('preview').innerHTML = `
-                <img src="${e.target.result}" alt="Preview">
-            `;
-        };
-        reader.readAsDataURL(file);
+        this.selectedFiles = Array.from(fileList);
+        this.renderPreviewGrid();
     }
 
-    async uploadArtwork() {
+    renderPreviewGrid() {
+        const previewEl = document.getElementById('preview');
+
+        if (this.selectedFiles.length === 0) {
+            previewEl.innerHTML = '';
+            // Reset file input required state
+            document.getElementById('image').required = true;
+            return;
+        }
+
+        const count = this.selectedFiles.length;
+        const label = count === 1 ? '1 image selected' : `${count} images selected`;
+
+        previewEl.innerHTML = `
+            <div class="preview-count">${label}</div>
+            <div class="preview-grid"></div>
+        `;
+
+        const grid = previewEl.querySelector('.preview-grid');
+
+        this.selectedFiles.forEach((file, index) => {
+            const item = document.createElement('div');
+            item.className = 'preview-item';
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                item.innerHTML = `
+                    <img src="${e.target.result}" alt="Preview ${index + 1}">
+                    <button type="button" class="preview-remove" data-index="${index}">&times;</button>
+                `;
+                item.querySelector('.preview-remove').addEventListener('click', () => {
+                    this.removeSelectedFile(index);
+                });
+            };
+            reader.readAsDataURL(file);
+
+            grid.appendChild(item);
+        });
+    }
+
+    removeSelectedFile(index) {
+        this.selectedFiles.splice(index, 1);
+        this.renderPreviewGrid();
+
+        // Clear file input if no files remain (can't modify FileList directly)
+        if (this.selectedFiles.length === 0) {
+            document.getElementById('image').value = '';
+        } else {
+            // Remove required since we track files in selectedFiles
+            document.getElementById('image').required = false;
+        }
+    }
+
+    async uploadArtworks() {
         const btn = document.getElementById('upload-btn');
         const messageEl = document.getElementById('upload-message');
+        const progressEl = document.getElementById('upload-progress');
+        const progressBar = document.getElementById('upload-progress-bar');
+        const progressText = document.getElementById('upload-progress-text');
 
         const date = document.getElementById('date').value;
         const notes = document.getElementById('notes').value;
-        const imageFile = document.getElementById('image').files[0];
 
-        if (!imageFile) {
-            this.showError('upload-message', 'Please select an image');
+        // Use selectedFiles array (supports removals) or fall back to file input
+        const files = this.selectedFiles.length > 0
+            ? this.selectedFiles
+            : Array.from(document.getElementById('image').files);
+
+        if (files.length === 0) {
+            this.showError('upload-message', 'Please select at least one image');
             return;
         }
 
@@ -244,54 +300,104 @@ class AdminPanel {
             return;
         }
 
+        const total = files.length;
+        let uploaded = 0;
+        let failed = 0;
+
         btn.disabled = true;
-        btn.textContent = 'Uploading...';
         messageEl.innerHTML = '';
 
-        try {
-            // Upload to Cloudinary
-            const imageUrl = await this.uploadToCloudinary(imageFile);
-
-            // Calculate day number from date
-            const day = this.calculateDayNumber(date);
-
-            // Create artwork entry
-            const artwork = {
-                day: day,
-                date: date,
-                imageUrl: imageUrl,
-                notes: notes,
-                uploadedAt: new Date().toISOString(),
-                uploadedBy: this.currentUser.email
-            };
-
-            // Save to Firestore
-            await this.db.collection('artworks').add(artwork);
-
-            // Add to local array (with the doc id)
-            await this.loadExistingArtworks();
-
-            // Show success message
-            messageEl.innerHTML = `
-                <div class="message success">
-                    <strong>Artwork uploaded successfully!</strong><br>
-                    Added to Day ${day} (${this.formatDate(date)}).
-                </div>
-            `;
-
-            // Reset form
-            document.getElementById('image').value = '';
-            document.getElementById('notes').value = '';
-            document.getElementById('preview').innerHTML = '';
-            this.setDefaultDate();
-
-        } catch (error) {
-            console.error('Upload error:', error);
-            this.showError('upload-message', 'Upload failed: ' + error.message);
+        // Show progress bar for bulk uploads
+        if (total > 1) {
+            progressEl.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            progressText.textContent = `Uploading 1 of ${total}...`;
+            btn.textContent = `Uploading 1 of ${total}...`;
+        } else {
+            btn.textContent = 'Uploading...';
         }
 
+        for (let i = 0; i < total; i++) {
+            const file = files[i];
+
+            if (total > 1) {
+                const current = i + 1;
+                progressText.textContent = `Uploading ${current} of ${total}...`;
+                progressBar.style.width = `${((i) / total) * 100}%`;
+                btn.textContent = `Uploading ${current} of ${total}...`;
+            }
+
+            try {
+                // Upload to Cloudinary
+                const imageUrl = await this.uploadToCloudinary(file);
+
+                // Calculate day number from date
+                const day = this.calculateDayNumber(date);
+
+                // Create artwork entry
+                const artwork = {
+                    day: day,
+                    date: date,
+                    imageUrl: imageUrl,
+                    notes: notes,
+                    uploadedAt: new Date().toISOString(),
+                    uploadedBy: this.currentUser.email
+                };
+
+                // Save to Firestore
+                await this.db.collection('artworks').add(artwork);
+
+                // Add to local artworks so day calculation stays correct
+                this.artworks.push(artwork);
+
+                uploaded++;
+            } catch (error) {
+                console.error(`Upload error for file ${i + 1}:`, error);
+                failed++;
+            }
+        }
+
+        // Complete progress bar
+        if (total > 1) {
+            progressBar.style.width = '100%';
+        }
+
+        // Reload all artworks to get correct IDs
+        await this.loadExistingArtworks();
+
+        // Show result message
+        if (failed === 0) {
+            const label = uploaded === 1 ? 'Artwork uploaded successfully!' : `${uploaded} artworks uploaded successfully!`;
+            messageEl.innerHTML = `
+                <div class="message success">
+                    <strong>${label}</strong><br>
+                    Added to ${this.formatDate(date)}.
+                </div>
+            `;
+        } else {
+            messageEl.innerHTML = `
+                <div class="message error">
+                    <strong>${uploaded} of ${total} uploaded. ${failed} failed.</strong><br>
+                    Check the console for details.
+                </div>
+            `;
+        }
+
+        // Reset form
+        document.getElementById('image').value = '';
+        document.getElementById('image').required = true;
+        document.getElementById('notes').value = '';
+        document.getElementById('preview').innerHTML = '';
+        this.selectedFiles = [];
+        this.setDefaultDate();
+
+        // Hide progress bar after a short delay
+        setTimeout(() => {
+            progressEl.classList.add('hidden');
+        }, 1000);
+
         btn.disabled = false;
-        btn.textContent = 'Upload Artwork';
+        btn.textContent = total === 1 ? 'Upload Artwork' : 'Upload Artworks';
     }
 
     async uploadToCloudinary(file) {
