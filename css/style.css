@@ -877,6 +877,23 @@ footer {
     background: rgba(220, 38, 38, 0.9);
 }
 
+/* Camera Capture Button */
+.btn-camera {
+    width: 100%;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: transparent;
+    color: var(--accent);
+    border: 1px dashed var(--accent);
+}
+
+.btn-camera:hover {
+    background: rgba(37, 99, 235, 0.05);
+}
+
 /* Upload Progress Bar */
 .upload-progress {
     position: relative;

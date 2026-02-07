@@ -195,7 +195,8 @@ class ArtGallery {
     }
 
     updateStats() {
-        const daysCompleted = this.artworks.length;
+        const uniqueDates = new Set(this.artworks.map(a => a.date));
+        const daysCompleted = uniqueDates.size;
         const daysRemaining = Math.max(0, 365 - daysCompleted);
         const streak = this.calculateStreak();
 
@@ -207,13 +208,16 @@ class ArtGallery {
     calculateStreak() {
         if (this.artworks.length === 0) return 0;
 
-        const sorted = [...this.artworks].sort((a, b) => new Date(b.date) - new Date(a.date));
+        // Get unique dates, sorted descending
+        const uniqueDates = [...new Set(this.artworks.map(a => a.date))]
+            .sort((a, b) => new Date(b) - new Date(a));
+
         let streak = 0;
         let currentDate = new Date();
         currentDate.setHours(0, 0, 0, 0);
 
-        for (const artwork of sorted) {
-            const artworkDate = new Date(artwork.date);
+        for (const dateStr of uniqueDates) {
+            const artworkDate = new Date(dateStr);
             artworkDate.setHours(0, 0, 0, 0);
 
             const diffDays = Math.floor((currentDate - artworkDate) / (1000 * 60 * 60 * 24));

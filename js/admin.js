@@ -80,6 +80,21 @@ class AdminPanel {
             this.previewImages(e.target.files);
         });
 
+        // Camera capture button
+        document.getElementById('camera-btn').addEventListener('click', () => {
+            document.getElementById('camera-input').click();
+        });
+
+        document.getElementById('camera-input').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                this.selectedFiles.push(...Array.from(e.target.files));
+                this.renderPreviewGrid();
+                document.getElementById('image').required = false;
+                // Reset camera input so the same photo can be retaken
+                e.target.value = '';
+            }
+        });
+
         // Edit modal events
         document.getElementById('edit-modal-close').addEventListener('click', () => {
             this.closeEditModal();
